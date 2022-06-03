@@ -9,6 +9,9 @@
 #include "riscv.h"
 #include "defs.h"
 
+//pages reference array
+int refs[NUM_PYS_PAGES];
+
 void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
@@ -27,6 +30,8 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+// initialize refs array with 0's
+  memset(references, 0, sizeof(int)*NUM_PYS_PAGES);
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -50,6 +55,12 @@ kfree(void *pa)
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
+
+  if(ref_dec((uint64)pa) > 0){
+      return;
+  }
+
+  refs[PA2PTE(pa)] = 0;
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
@@ -79,4 +90,25 @@ kalloc(void)
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+int
+ref_dec(uint64 pa){
+    int curr_ref;
+// @TODO: add cas
+    ref = --refs[PA2PTE(pa)];
+    return curr_ref;
+}
+
+int
+ref_inc(uint64 pa){
+    int curr_ref;
+    //@TODO: add cas
+    ref = ++refs[PA2PTE(pa)];
+    return curr_ref;
+}
+
+int
+get_ref(uint64 pa){
+    return refs[PA2PTE(pa)];
 }
