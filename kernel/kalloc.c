@@ -16,6 +16,8 @@ void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
+extern uint64 cas(volatile void *addr,int expected,int newval);
+
 
 struct run {
   struct run *next;
@@ -97,7 +99,9 @@ kalloc(void)
 int
 ref_dec(uint64 pa){
     int curr_ref;
-// @TODO: add cas
+    do{
+
+    }
     ref = --refs[PA2PTE(pa)];
     return curr_ref;
 }
