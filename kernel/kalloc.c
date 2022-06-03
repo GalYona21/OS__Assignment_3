@@ -100,9 +100,8 @@ int
 ref_dec(uint64 pa){
     int curr_ref;
     do{
-
-    }
-    ref = --refs[PA2PTE(pa)];
+        curr_ref = refs[PA2PTE(pa)]
+    }while(cas())
     return curr_ref;
 }
 
