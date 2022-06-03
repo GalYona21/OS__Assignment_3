@@ -11,6 +11,7 @@
 
 //pages reference array
 int refs[NUM_PYS_PAGES];
+struct spinlock lock_ref;
 
 void freerange(void *pa_start, void *pa_end);
 
@@ -28,12 +29,54 @@ struct {
   struct run *freelist;
 } kmem;
 
+int
+get_ref_index(void* pa){
+    return ((uint64)pa) / PGSIZE;
+}
+
+int
+ref_dec(uint64 pa){
+    int curr_ref;
+//    printf("ref_dec 1 refs[PA2PTE(pa)]: %p", refs[PA2PTE(pa)]);
+//    do{
+//        curr_ref = refs[PA2PTE(pa)];
+//    }while(cas(&refs[PA2PTE(pa)], refs[PA2PTE(pa)], refs[PA2PTE(pa)]-1));
+    acquire(&lock_ref);
+    curr_ref = --refs[get_ref_index((void*)pa)];
+    release(&lock_ref);
+//    printf("ref_dec 2");
+
+    return curr_ref;
+}
+
+int
+ref_inc(uint64 pa){
+    int curr_ref;
+//    printf("ref_inc 1");
+
+//    do{
+//        curr_ref = refs[PA2PTE(pa)];
+//    }while(cas(&refs[PA2PTE(pa)], refs[PA2PTE(pa)], refs[PA2PTE(pa)]+1));
+    acquire(&lock_ref);
+    curr_ref = ++refs[get_ref_index((void*)pa)];
+    release(&lock_ref);
+//    printf("ref_inc 2");
+
+    return curr_ref;
+}
+
+int
+get_ref(uint64 pa){
+    return refs[get_ref_index((void*)pa)];
+}
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+    initlock(&lock_ref, "lock_ref");
 // initialize refs array with 0's
-  memset(references, 0, sizeof(int)*NUM_PYS_PAGES);
+  memset(refs, 0, sizeof(int)*NUM_PYS_PAGES);
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -59,10 +102,13 @@ kfree(void *pa)
     panic("kfree");
 
   if(ref_dec((uint64)pa) > 0){
+//      printf("kfree 1");
+
       return;
   }
 
-  refs[PA2PTE(pa)] = 0;
+  refs[get_ref_index((void*)pa)] = 0;
+//  printf("kfree 2");
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
@@ -73,6 +119,8 @@ kfree(void *pa)
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
+//    printf("kfree 2");
+
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -82,11 +130,12 @@ void *
 kalloc(void)
 {
   struct run *r;
+//    printf("kalloc");
 
   acquire(&kmem.lock);
   r = kmem.freelist;
   if(r) {
-      refs[PA2PTE(r)] = 1;
+      refs[get_ref_index((void*)r)] = 1;
       kmem.freelist = r->next;
   }
   release(&kmem.lock);
@@ -96,24 +145,4 @@ kalloc(void)
   return (void*)r;
 }
 
-int
-ref_dec(uint64 pa){
-    int curr_ref;
-    do{
-        curr_ref = refs[PA2PTE(pa)]
-    }while(cas())
-    return curr_ref;
-}
 
-int
-ref_inc(uint64 pa){
-    int curr_ref;
-    //@TODO: add cas
-    ref = ++refs[PA2PTE(pa)];
-    return curr_ref;
-}
-
-int
-get_ref(uint64 pa){
-    return refs[PA2PTE(pa)];
-}
