@@ -83,8 +83,10 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
-    kmem.freelist = r->next;
+  if(r) {
+      refs[PA2PTE(r)] = 1;
+      kmem.freelist = r->next;
+  }
   release(&kmem.lock);
 
   if(r)

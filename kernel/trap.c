@@ -218,3 +218,31 @@ devintr()
   }
 }
 
+//handle the copy on write procedure
+int
+handle_trap_cow(pagetable_t pt, uint64 virtual_address){
+    virtual_address = PGROUNDDOWN(virtual_address);
+    if(virtual_address >= MAXVA){
+//        virtual address out of bounds
+        return -1;
+    }
+
+    pte_t *pte;
+    if((pte = walkaddr(pt, virtual_address)) == 0 || (*pte & PTE_V) == 0){
+        return -1;
+    }
+    if((*pte & PTE_COW) == 0){
+        return 1;
+    }
+
+    char *num_pa;
+    if((num_pa = kalloc()) != 0){
+        uint64 physical_address = PTE2PA(*pte);
+        memmove(num_pa, (char*)physical_address, PGSIZE);
+        *pte = PA2PTE(num_pa) | ((PTE_FLAGS(*pte) * ~PTE_COW) | PTE_W);
+        kfree((void*)physical_address);
+        return 0;
+    }
+    return -1;
+}
+
