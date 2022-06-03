@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 
+
 struct spinlock tickslock;
 uint ticks;
 
@@ -65,6 +66,12 @@ usertrap(void)
     intr_on();
 
     syscall();
+
+  } else if(r_scause() == 13 || r_scause() == 15){
+      uint64 virtual_address = r_stval();
+      if(virtual_address >= p->sz || handle_trap_cow(p->pagetable,virtual_address) != 0)
+          p->killed = 1;
+
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
@@ -228,7 +235,7 @@ handle_trap_cow(pagetable_t pt, uint64 virtual_address){
     }
 
     pte_t *pte;
-    if((pte = walkaddr(pt, virtual_address)) == 0 || (*pte & PTE_V) == 0){
+    if((pte = walk(pt, virtual_address,0)) == 0 || (*pte & PTE_V) == 0){
         return -1;
     }
     if((*pte & PTE_COW) == 0){
