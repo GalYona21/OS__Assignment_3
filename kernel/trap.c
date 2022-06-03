@@ -105,9 +105,8 @@ usertrap(void)
       uint64 virtual_address = r_stval();
       if(virtual_address >= p->sz || handle_trap_cow(p->pagetable,virtual_address) != 0)
           p->killed = 1;
-
   } else if((which_dev = devintr()) != 0){
-    // ok
+      // ok
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
@@ -121,7 +120,8 @@ usertrap(void)
   if(which_dev == 2)
     yield();
 
-  usertrapret();
+
+    usertrapret();
 }
 
 //
@@ -165,8 +165,10 @@ usertrapret(void)
   // jump to trampoline.S at the top of memory, which 
   // switches to the user page table, restores user registers,
   // and switches to user mode with sret.
-  uint64 fn = TRAMPOLINE + (userret - trampoline);
+
+    uint64 fn = TRAMPOLINE + (userret - trampoline);
   ((void (*)(uint64,uint64))fn)(TRAPFRAME, satp);
+
 }
 
 // interrupts and exceptions from kernel code go here via kernelvec,
