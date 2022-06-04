@@ -31,7 +31,7 @@ struct {
 
 int
 get_ref_index(void* pa){
-    return ((uint64)pa) / PGSIZE;
+    return ((uint64)pa - KERNBASE) / PGSIZE;
 }
 
 int

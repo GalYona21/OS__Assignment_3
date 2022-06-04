@@ -173,6 +173,7 @@ int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 int             handle_trap_cow(pagetable_t, uint64);
 int             get_ref_index(void*);
+int             ref_inc(uint64);
 
 
 // plic.c

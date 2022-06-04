@@ -326,6 +326,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 //      kfree(mem);
       goto err;
     }
+    ref_inc(pa);
   }
   return 0;
 

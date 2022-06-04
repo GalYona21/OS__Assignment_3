@@ -47,18 +47,19 @@ handle_trap_cow(pagetable_t pt, uint64 virtual_address){
     }
 
     pte_t *pte;
-    if((pte = walk(pt, virtual_address,0)) == 0 || (*pte & PTE_V) == 0){
+    if(((pte = walk(pt, virtual_address,0)) == 0) || ((*pte & PTE_V) == 0)){
         return -1;
     }
     if((*pte & PTE_COW) == 0){
         return 1;
     }
 
+    printf("asdasa");
     char *num_pa;
     if((num_pa = kalloc()) != 0){
         uint64 physical_address = PTE2PA(*pte);
         memmove(num_pa, (char*)physical_address, PGSIZE);
-        *pte = get_ref_index((void*)num_pa) | ((PTE_FLAGS(*pte) * ~PTE_COW) | PTE_W);
+        *pte = PA2PTE(num_pa) | ((PTE_FLAGS(*pte) * ~PTE_COW) | PTE_W);
         kfree((void*)physical_address);
         return 0;
     }
@@ -103,8 +104,12 @@ usertrap(void)
 
   } else if(r_scause() == 13 || r_scause() == 15){
       uint64 virtual_address = r_stval();
-      if(virtual_address >= p->sz || handle_trap_cow(p->pagetable,virtual_address) != 0)
+      printf("in usertrap, r_scause(): %d", r_scause());
+      if(virtual_address >= p->sz || handle_trap_cow(p->pagetable,virtual_address) != 0){
+          printf("in usertrap after handle_trap_cow");
           p->killed = 1;
+          }
+      printf("in usertrap after handle_trap_cow not in");
 
   } else if((which_dev = devintr()) != 0){
     // ok
@@ -113,7 +118,6 @@ usertrap(void)
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
-
   if(p->killed)
     exit(-1);
 
