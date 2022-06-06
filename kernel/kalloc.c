@@ -34,7 +34,6 @@ struct {
     uint page_ref_counts[SIZE]; //an array of size PHYSTOP / PGSIZE to keep the refrence counts
 }refrence_count;
 
-
 void
 kinit()
 {
