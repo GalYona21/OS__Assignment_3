@@ -16,6 +16,9 @@ void freerange(void *pa_start, void *pa_end);
 extern char end[]; // first address after kernel.
 // defined by kernel.ld.
 
+extern uint64 cas(volatile void *addr, int expected, int newval);
+
+
 struct run {
     struct run *next;
 };
@@ -111,10 +114,12 @@ void increase_refrence_count(uint64 pa) {
         panic("refrence count");
     }
 
-    acquire(&refrence_count.count_lock);
+    //    acquire(&refrence_count.count_lock);
+    while(cas(&refrence_count.page_ref_counts[ pa  / PGSIZE], refrence_count.page_ref_counts[ pa  / PGSIZE], refrence_count.page_ref_counts[ pa  / PGSIZE] + 1));
+//    printf("in inc ref");
 
-    ++refrence_count.page_ref_counts[ pa  / PGSIZE];
-    release(&refrence_count.count_lock);
+    //    ++refrence_count.page_ref_counts[ pa  / PGSIZE];
+    //    release(&refrence_count.count_lock);
 }
 
 void decrease_refrence_count(uint64 pa) {
@@ -122,21 +127,27 @@ void decrease_refrence_count(uint64 pa) {
         panic("refrence count");
     }
 
-    acquire(&refrence_count.count_lock);
-    if (--refrence_count.page_ref_counts[ pa  / PGSIZE] < 0 ) {
-        panic("something unexpected occured\n");
-    }
-    release(&refrence_count.count_lock);
+    while(cas(&refrence_count.page_ref_counts[ pa  / PGSIZE], refrence_count.page_ref_counts[ pa  / PGSIZE], refrence_count.page_ref_counts[ pa  / PGSIZE] - 1));
+//    printf("in det ref");
+
+//    acquire(&refrence_count.count_lock);
+//    if (--refrence_count.page_ref_counts[ pa  / PGSIZE] < 0 ) {
+//        panic("something unexpected occured\n");
+//    }
+//    release(&refrence_count.count_lock);
 }
 
 uint get_refrence_count(uint64 pa) {
     if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
         panic("refrence count");
     }
+    uint count;
+    while(cas(&count, count, refrence_count.page_ref_counts[ pa  / PGSIZE]));
+//    printf("in get ref");
 
-    acquire(&refrence_count.count_lock);
-    uint count = refrence_count.page_ref_counts[ pa / PGSIZE];
-    release(&refrence_count.count_lock);
+//    acquire(&refrence_count.count_lock);
+//    uint count = refrence_count.page_ref_counts[ pa / PGSIZE];
+//    release(&refrence_count.count_lock);
 
     return count;
 }
@@ -145,8 +156,9 @@ void set_refrence_count(uint64 pa , int value) {
     if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
         panic("refrence count");
     }
-
-    acquire(&refrence_count.count_lock);
-    refrence_count.page_ref_counts[ pa  / PGSIZE] = value;
-    release(&refrence_count.count_lock);
+    while(cas(&refrence_count.page_ref_counts[ pa  / PGSIZE], refrence_count.page_ref_counts[ pa  / PGSIZE], value));
+//    printf("in set ref");
+//    acquire(&refrence_count.count_lock);
+//    refrence_count.page_ref_counts[ pa  / PGSIZE] = value;
+//    release(&refrence_count.count_lock);
 }
