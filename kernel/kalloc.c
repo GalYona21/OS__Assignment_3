@@ -112,6 +112,7 @@ void increase_refrence_count(uint64 pa) {
     }
 
     acquire(&refrence_count.count_lock);
+
     ++refrence_count.page_ref_counts[ pa  / PGSIZE];
     release(&refrence_count.count_lock);
 }
