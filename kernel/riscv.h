@@ -349,6 +349,8 @@ sfence_vma()
 
 #define PTE2PA(pte) (((pte) >> 10) << 12)
 
+#define PTE_COW (1L << 9) // copy-on-write
+
 #define PTE_FLAGS(pte) ((pte) & 0x3FF)
 
 // extract the three 9-bit page table indices from a virtual address.

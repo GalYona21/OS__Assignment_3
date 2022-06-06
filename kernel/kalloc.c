@@ -9,34 +9,48 @@
 #include "riscv.h"
 #include "defs.h"
 
+#define SIZE ( PHYSTOP / PGSIZE)
+
 void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
-                   // defined by kernel.ld.
+// defined by kernel.ld.
 
 struct run {
-  struct run *next;
+    struct run *next;
 };
 
 struct {
-  struct spinlock lock;
-  struct run *freelist;
+    struct spinlock lock;
+    struct run *freelist;
 } kmem;
+
+
+struct {
+    struct spinlock count_lock;
+    uint page_ref_counts[SIZE]; //an array of size PHYSTOP / PGSIZE to keep the refrence counts
+}refrence_count;
+
 
 void
 kinit()
 {
-  initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+    initlock(&kmem.lock, "kmem");
+    freerange(end, (void*)PHYSTOP);
+
+    //also init the refrence_count lock
+    initlock(&refrence_count.count_lock , "ref_count_lock");
 }
 
 void
 freerange(void *pa_start, void *pa_end)
 {
-  char *p;
-  p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
-    kfree(p);
+    char *p;
+    p = (char*)PGROUNDUP((uint64)pa_start);
+    for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE) {
+        set_refrence_count((uint64) p, 1); //set refrence count to 1
+        kfree(p);
+    }
 }
 
 // Free the page of physical memory pointed at by v,
@@ -46,20 +60,27 @@ freerange(void *pa_start, void *pa_end)
 void
 kfree(void *pa)
 {
-  struct run *r;
+    struct run *r;
 
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
-    panic("kfree");
+    if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+        panic("kfree");
 
-  // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
+    //only decrease refrence count if its higher that 1
+    if (get_refrence_count((uint64) pa) > 1) {
+        decrease_refrence_count((uint64)   pa);
+        return;
+    }
 
-  r = (struct run*)pa;
+    // Fill with junk to catch dangling refs.
+    memset(pa, 1, PGSIZE);
+    set_refrence_count((uint64) pa , 0);
 
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+    r = (struct run*)pa;
+
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    release(&kmem.lock);
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -68,15 +89,63 @@ kfree(void *pa)
 void *
 kalloc(void)
 {
-  struct run *r;
+    struct run *r;
 
-  acquire(&kmem.lock);
-  r = kmem.freelist;
-  if(r)
-    kmem.freelist = r->next;
-  release(&kmem.lock);
+    acquire(&kmem.lock);
+    r = kmem.freelist;
+    if(r)
+        kmem.freelist = r->next;
+    release(&kmem.lock);
 
-  if(r)
-    memset((char*)r, 5, PGSIZE); // fill with junk
-  return (void*)r;
+    if(r) {
+        memset((char*)r, 5, PGSIZE); // fill with junk
+        set_refrence_count((uint64) r , 1);
+    }
+
+    return (void*)r;
+}
+
+
+void increase_refrence_count(uint64 pa) {
+    if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
+        panic("refrence count");
+    }
+
+    acquire(&refrence_count.count_lock);
+    ++refrence_count.page_ref_counts[ pa  / PGSIZE];
+    release(&refrence_count.count_lock);
+}
+
+void decrease_refrence_count(uint64 pa) {
+    if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
+        panic("refrence count");
+    }
+
+    acquire(&refrence_count.count_lock);
+    if (--refrence_count.page_ref_counts[ pa  / PGSIZE] < 0 ) {
+        panic("something unexpected occured\n");
+    }
+    release(&refrence_count.count_lock);
+}
+
+uint get_refrence_count(uint64 pa) {
+    if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
+        panic("refrence count");
+    }
+
+    acquire(&refrence_count.count_lock);
+    uint count = refrence_count.page_ref_counts[ pa / PGSIZE];
+    release(&refrence_count.count_lock);
+
+    return count;
+}
+
+void set_refrence_count(uint64 pa , int value) {
+    if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
+        panic("refrence count");
+    }
+
+    acquire(&refrence_count.count_lock);
+    refrence_count.page_ref_counts[ pa  / PGSIZE] = value;
+    release(&refrence_count.count_lock);
 }
