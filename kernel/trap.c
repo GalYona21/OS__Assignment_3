@@ -68,18 +68,20 @@ usertrap(void)
     }
     else if (r_scause() == 15) {
 
-        uint64 va = PGROUNDDOWN(r_stval());
+        uint64 virtual_address = PGROUNDDOWN(r_stval());
 
-        pte_t* pte = walk(p->pagetable, va, 0);
+        pte_t* pte = walk(p->pagetable, virtual_address, 0);
+
         if (pte == 0) {
+
             p->killed = 1;
             exit(-1);
         }
 
-        uint64 pa = PTE2PA(*pte);
+        uint64 physical_address = PTE2PA(*pte);
 
-        //if this is a valid  , user , cow page and its va is valid handle it accordingly
-        if ((*pte & PTE_V) && (*pte & PTE_U) && (*pte & PTE_COW) && va < MAXVA) {
+
+        if ((*pte & PTE_V) && (*pte & PTE_U) && (*pte & PTE_COW) && virtual_address < MAXVA) {
 
             void* mem = kalloc();
             if(mem == 0) {
@@ -87,13 +89,12 @@ usertrap(void)
                 exit(-1);
             }
 
-            //copy to a new page with appropriate perms
-            memmove(mem, (char*)pa, PGSIZE);
+
+            memmove(mem, (char*)physical_address, PGSIZE);
             *pte = (PA2PTE(mem) | PTE_R | PTE_W | PTE_X | PTE_U | PTE_V );
             *pte &= (~PTE_COW);
 
-            //modified to only decrease refrence count if its higher that 1
-            kfree((void*)pa);
+            kfree((void*)physical_address);
         }
         else {
             p->killed = 1;

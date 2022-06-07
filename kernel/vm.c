@@ -326,7 +326,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
             goto err;
         }
         // increase refrence_count for this page
-        increase_refrence_count(pa);
+        inc_ref(pa);
     }
     return 0;
 

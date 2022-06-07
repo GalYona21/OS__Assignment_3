@@ -28,11 +28,8 @@ struct {
     struct run *freelist;
 } kmem;
 
+uint page_ref_counts[SIZE];
 
-struct {
-    struct spinlock count_lock;
-    uint page_ref_counts[SIZE]; //an array of size PHYSTOP / PGSIZE to keep the refrence counts
-}refrence_count;
 
 void
 kinit()
@@ -40,8 +37,6 @@ kinit()
     initlock(&kmem.lock, "kmem");
     freerange(end, (void*)PHYSTOP);
 
-    //also init the refrence_count lock
-    initlock(&refrence_count.count_lock , "ref_count_lock");
 }
 
 void
@@ -50,7 +45,7 @@ freerange(void *pa_start, void *pa_end)
     char *p;
     p = (char*)PGROUNDUP((uint64)pa_start);
     for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE) {
-        set_refrence_count((uint64) p, 1); //set refrence count to 1
+        set_ref((uint64) p, 1);
         kfree(p);
     }
 }
@@ -68,14 +63,14 @@ kfree(void *pa)
         panic("kfree");
 
     //only decrease refrence count if its higher that 1
-    if (get_refrence_count((uint64) pa) > 1) {
-        decrease_refrence_count((uint64)   pa);
+    if (get_ref((uint64) pa) > 1) {
+        dec_ref((uint64)   pa);
         return;
     }
 
     // Fill with junk to catch dangling refs.
     memset(pa, 1, PGSIZE);
-    set_refrence_count((uint64) pa , 0);
+    set_ref((uint64) pa , 0);
 
     r = (struct run*)pa;
 
@@ -101,63 +96,42 @@ kalloc(void)
 
     if(r) {
         memset((char*)r, 5, PGSIZE); // fill with junk
-        set_refrence_count((uint64) r , 1);
+        set_ref((uint64) r , 1);
     }
 
     return (void*)r;
 }
 
 
-void increase_refrence_count(uint64 pa) {
+void inc_ref(uint64 pa) {
+    if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
+        panic("refrence count");
+    }
+    while(cas(&page_ref_counts[ pa  / PGSIZE], page_ref_counts[ pa  / PGSIZE], page_ref_counts[ pa  / PGSIZE] + 1));
+
+}
+
+void dec_ref(uint64 pa) {
     if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
         panic("refrence count");
     }
 
-    //    acquire(&refrence_count.count_lock);
-    while(cas(&refrence_count.page_ref_counts[ pa  / PGSIZE], refrence_count.page_ref_counts[ pa  / PGSIZE], refrence_count.page_ref_counts[ pa  / PGSIZE] + 1));
-//    printf("in inc ref");
-
-    //    ++refrence_count.page_ref_counts[ pa  / PGSIZE];
-    //    release(&refrence_count.count_lock);
+    while(cas(&page_ref_counts[ pa  / PGSIZE], page_ref_counts[ pa  / PGSIZE], page_ref_counts[ pa  / PGSIZE] - 1));
 }
 
-void decrease_refrence_count(uint64 pa) {
-    if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
-        panic("refrence count");
-    }
-
-    while(cas(&refrence_count.page_ref_counts[ pa  / PGSIZE], refrence_count.page_ref_counts[ pa  / PGSIZE], refrence_count.page_ref_counts[ pa  / PGSIZE] - 1));
-//    printf("in det ref");
-
-//    acquire(&refrence_count.count_lock);
-//    if (--refrence_count.page_ref_counts[ pa  / PGSIZE] < 0 ) {
-//        panic("something unexpected occured\n");
-//    }
-//    release(&refrence_count.count_lock);
-}
-
-uint get_refrence_count(uint64 pa) {
+uint get_ref(uint64 pa) {
     if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
         panic("refrence count");
     }
     uint count;
-    while(cas(&count, count, refrence_count.page_ref_counts[ pa  / PGSIZE]));
-//    printf("in get ref");
-
-//    acquire(&refrence_count.count_lock);
-//    uint count = refrence_count.page_ref_counts[ pa / PGSIZE];
-//    release(&refrence_count.count_lock);
+    while(cas(&count, count, page_ref_counts[ pa  / PGSIZE]));
 
     return count;
 }
 
-void set_refrence_count(uint64 pa , int value) {
+void set_ref(uint64 pa , int value) {
     if(pa < KERNBASE || pa >= PHYSTOP || pa % PGSIZE != 0 ) {
         panic("refrence count");
     }
-    while(cas(&refrence_count.page_ref_counts[ pa  / PGSIZE], refrence_count.page_ref_counts[ pa  / PGSIZE], value));
-//    printf("in set ref");
-//    acquire(&refrence_count.count_lock);
-//    refrence_count.page_ref_counts[ pa  / PGSIZE] = value;
-//    release(&refrence_count.count_lock);
+    while(cas(&page_ref_counts[ pa  / PGSIZE], page_ref_counts[ pa  / PGSIZE], value));
 }
