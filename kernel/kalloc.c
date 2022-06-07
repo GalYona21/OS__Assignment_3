@@ -9,7 +9,7 @@
 #include "riscv.h"
 #include "defs.h"
 
-#define SIZE ( PHYSTOP / PGSIZE)
+#define NUM_PYS_PAGES ((PHYSTOP) / PGSIZE)
 
 void freerange(void *pa_start, void *pa_end);
 
@@ -28,7 +28,7 @@ struct {
     struct run *freelist;
 } kmem;
 
-uint page_ref_counts[SIZE];
+uint page_ref_counts[NUM_PYS_PAGES];
 
 
 void

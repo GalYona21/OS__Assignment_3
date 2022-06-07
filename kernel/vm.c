@@ -308,7 +308,6 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     pte_t *pte;
     uint64 pa, i;
     uint flags;
-
     for(i = 0; i < sz; i += PGSIZE){
         if((pte = walk(old, i, 0)) == 0)
             panic("uvmcopy: pte should exist");
@@ -316,16 +315,11 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
             panic("uvmcopy: page not present");
         pa = PTE2PA(*pte);
         flags = PTE_FLAGS(*pte);
-
-        //make parent - child pages read only and cow
         *pte = ((*pte & (~PTE_W)) | PTE_COW );
         flags = ((flags & (~PTE_W) ) | PTE_COW) ;
-
-
         if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
             goto err;
         }
-        // increase refrence_count for this page
         inc_ref(pa);
     }
     return 0;
@@ -354,24 +348,20 @@ uvmclear(pagetable_t pagetable, uint64 va)
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
-    uint64 n, va0, pa0;
     pte_t *pte;
+    uint64 n, va0, pa0;
 
     while(len > 0){
         va0 = PGROUNDDOWN(dstva);
 
-        //check for valid va
         if (va0 >= MAXVA) {
             return -1;
         }
-
 
         pte = walk(pagetable , va0 , 0);
         if (pte == 0) {
             return -1;
         }
-
-        //handle it if this is a cowpage
         if ((*pte & PTE_COW)  ) {
 
             uint64 pa = PTE2PA(*pte);
@@ -384,7 +374,6 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
             *pte = (PA2PTE(mem) | PTE_R | PTE_W | PTE_X | PTE_U | PTE_V );
             *pte &= (~PTE_COW);
 
-            //modified to only decrease refrence count if refrence count is > 1
             kfree((void*)pa);
         }
 
